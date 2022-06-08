@@ -1,6 +1,6 @@
 # agent_pool
 
-TODO: Write a description here
+Crystal Shard to handle agent pooling using fibers.
 
 ## Installation
 
@@ -9,7 +9,7 @@ TODO: Write a description here
    ```yaml
    dependencies:
      agent_pool:
-       github: your-github-user/agent_pool
+       github: aluminumio/agent_pool
    ```
 
 2. Run `shards install`
