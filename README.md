@@ -1,6 +1,6 @@
 # agent_pool
 
-TODO: Write a description here
+Crystal Shard to handle agent pooling using fibers.
 
 ## Installation
 
