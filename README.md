@@ -1,6 +1,6 @@
 # agent_pool
 
-TODO: Write a description here
+A shard to handle agent pooling with reusable connections.
 
 ## Installation
 
@@ -9,7 +9,7 @@ TODO: Write a description here
    ```yaml
    dependencies:
      agent_pool:
-       github: your-github-user/agent_pool
+       github: aluminumio/agent_pool
    ```
 
 2. Run `shards install`
@@ -18,13 +18,20 @@ TODO: Write a description here
 
 ```crystal
 require "agent_pool"
+
+pool = AgentPool::AgentPool(Agent).new
+agent = pool.checkout("destination")
+spawn do
+  agent.do_work("abcd")
+  pool.release(agent, "destination")
+end
 ```
 
 TODO: Write usage instructions here
 
 ## Development
 
-TODO: Write development instructions here
+TODO: Handle timeouts raised by agents.
 
 ## Contributing
 
@@ -36,4 +43,4 @@ TODO: Write development instructions here
 
 ## Contributors
 
-- [usiegl00](https://github.com/your-github-user) - creator and maintainer
+- [usiegl00](https://github.com/usiegl00) - creator and maintainer

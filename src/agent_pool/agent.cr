@@ -1,34 +1,28 @@
 module AgentPool
   class Agent
-    def self.spawn_agent(destination : String, channel : Channel(Command))
-      agent = Agent.build(destination, channel)
-      agent.main_loop
+    @initialized = false
+
+    def initialize(@destination : String)
     end
 
-    def initialize(@destination : String, @channel : Channel(Command))
-    end
-
-    def self.build(destination : String, channel : Channel(Command)) : Agent?
-      if destination[0] == 'a'
-        # TODO: Handle a failing agent build.
-        # return nil
-      end
-      return Agent.new(destination, channel)
-    end
-
-    def main_loop
+    def offset_initialization
       # Simulate initialization time.
-      sleep(rand * 10)
-      puts "Initialized."
-      while cmd = @channel.receive?
-        # Simulate a highly variable amount of work.
+      sleep 10
+      @initalized = true
+    end
+
+    def handle_cmd(cmd)
+      offset_initialization unless @initialized
+      puts "Sleeping."
+      rand(0..@destination.size).times do
         puts "Sleeping."
-        rand(0..@destination.size).times do
-          puts "Sleeping."
-          sleep(rand)
-        end
-        puts "Done Sleeping."
+        sleep(rand)
       end
+      puts "Done Sleeping."
+    end
+
+    def close
+      return true
     end
   end
 end

@@ -6,26 +6,28 @@ module AgentPool
 
     # TODO: Respect these dynamic limits.
     MAX_AGENTS_PER_DESTINATION = 20
-    MAX_TOTAL_AGENTS = MAX_AGENTS_PER_DESTINATION * 1000
+    MAX_TOTAL_AGENTS = 1000
 
-    @pool_of_agents : Hash(String, Array(Channel(Command)))
+    @pool_of_agents : AgentPool(Agent)
 
     def initialize
-      @pool_of_agents = Hash(String, Array(Channel(Command))).new
+      @pool_of_agents = AgentPool.new(max_pool_size: MAX_TOTAL_AGENTS) {|destination| create_agent_for_destination(destination) }
     end
 
     def handle_command(cmd : Command, destination : String)
-      Channel.send_first(cmd, self.channels_for_destination(destination))
+      agent = @pool_of_agents.checkout(destination)
+      spawn do
+        agent.handle_cmd(cmd)
+        @pool_of_agents.release(agent, destination)
+      end
     end
 
-    def channels_for_destination(destination : String) : Array(Channel(Command))
-      return @pool_of_agents[destination] ||= [create_agent_for_destination(destination)]
+    def create_agent_for_destination(destination : String) : Agent
+      return Agent.new(destination)
     end
 
-    def create_agent_for_destination(destination : String) : Channel(Command)
-      channel = Channel(Command).new
-      spawn Agent.spawn_agent(destination, channel)
-      return channel
+    def stats
+      return @pool_of_agents.stats
     end
   end
 end
