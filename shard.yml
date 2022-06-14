@@ -1,0 +1,17 @@
+name: agent_pool
+version: 0.1.0
+
+targets:
+  test_build:
+    main: src/agent_pool.cr
+
+dependencies:
+  db:
+    github: crystal-lang/crystal-db
+
+authors:
+  - usiegl00 <50933431+usiegl00@users.noreply.github.com>
+
+crystal: 1.4.1
+
+license: MIT
