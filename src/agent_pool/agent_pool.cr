@@ -144,7 +144,7 @@ module AgentPool
       current_available = 0
 
       sync do
-        current_available = !@idle[index].nil? ? @idle[index].size : 0
+        current_available = @idle[index]?.try(&.size) || 0
         # if the pool hasn't reach the max size, allow 1 attempt
         # to make a new connection if needed without sleeping
         current_available += 1 if can_increase_pool?
@@ -160,7 +160,7 @@ module AgentPool
           # we still need to remove it from the known pool.
           # Closed connection will be evicted from statement cache
           # in PoolPreparedStatement#clean_connections
-          sync { delete(e.resource) }
+          sync { delete(e.resource, index) }
         rescue e : PoolResourceRefused
           # a ConnectionRefused means a new connection
           # was intended to be created
