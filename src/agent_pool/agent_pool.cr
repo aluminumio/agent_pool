@@ -98,7 +98,7 @@ module AgentPool
       res
     end
 
-    def checkout(&block : T ->)
+    def checkout(& : T ->)
       connection = checkout
 
       begin
@@ -138,7 +138,7 @@ module AgentPool
     # Will retry the block if a `ConnectionLost` exception is thrown.
     # It will try to reuse all of the available connection right away,
     # but if a new connection is needed there is a `retry_delay` seconds delay.
-    def retry(index)
+    def retry(index, &)
       current_available = 0
 
       sync do
@@ -169,7 +169,7 @@ module AgentPool
     end
 
     # :nodoc:
-    def each_resource(index)
+    def each_resource(index, &)
       sync do
         (!@idle[index].nil ? @idle[index] : [] of T).each do |resource|
           yield resource
@@ -210,7 +210,7 @@ module AgentPool
       if ar
         return ar.first?
       end
-      return nil
+      nil
     end
 
     private def wait_for_available
@@ -237,7 +237,7 @@ module AgentPool
       @waiting_resource > 0
     end
 
-    private def sync
+    private def sync(&)
       @mutex.lock
       begin
         yield
@@ -246,7 +246,7 @@ module AgentPool
       end
     end
 
-    private def unsync
+    private def unsync(&)
       @mutex.unlock
       begin
         yield

@@ -36,10 +36,10 @@ class TestPool
   end
 
   def create_agent_for_destination(destination : String) : TestAgent
-    return TestAgent.new(destination)
+    TestAgent.new(destination)
   end
 
   def stats
-    return @pool_of_agents.stats
+    @pool_of_agents.stats
   end
 end

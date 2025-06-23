@@ -27,6 +27,6 @@ class TestAgent
   end
 
   def close
-    return true
+    true
   end
 end
