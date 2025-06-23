@@ -1,5 +1,3 @@
-require "db"
-
 module AgentPool
   class AgentPool(T)
     # Pool configuration
@@ -10,7 +8,7 @@ module AgentPool
     @max_idle_pool_size : Int32
     # seconds to wait before timeout while doing a checkout
     @checkout_timeout : Float64
-    # maximum amount of retry attempts to reconnect to the db. See `Pool#retry`
+    # maximum amount of retry attempts to reconnect to the resource. See `Pool#retry`
     @retry_attempts : Int32
     # seconds to wait before a retry attempt
     @retry_delay : Float64
@@ -21,7 +19,7 @@ module AgentPool
     @total = {} of String => Array(T)
     # connections available for checkout
     @idle = {} of String => Set(T)
-    # connections waiting to be stablished (they are not in *@idle* nor in *@total*)
+    # connections waiting to be established (they are not in *@idle* nor in *@total*)
     @inflight : Int32
 
     # Sync state
@@ -64,15 +62,15 @@ module AgentPool
       )
     end
 
-    def checkout(index) : T
+    def checkout(resource_group) : T
       res = sync do
         resource = nil
 
         until resource
-          resource = if @idle[index]?.nil? || @idle[index].empty?
+          resource = if @idle[resource_group]?.nil? || @idle[resource_group].empty?
                        if can_increase_pool?
                          @inflight += 1
-                         r = unsync { build_resource(index) }
+                         r = unsync { build_resource(resource_group) }
                          @inflight -= 1
                          r
                        else
@@ -82,14 +80,14 @@ module AgentPool
                          # Although only one will pick it due to the lock
                          # in the end of the unsync, the pick_available
                          # will return nil
-                         pick_available(index)
+                         pick_available(resource_group)
                        end
                      else
-                       pick_available(index)
+                       pick_available(resource_group)
                      end
         end
 
-        @idle[index].delete resource
+        @idle[resource_group].delete resource
 
         resource
       end
@@ -100,7 +98,7 @@ module AgentPool
       res
     end
 
-    def checkout(&block : T ->)
+    def checkout(& : T ->)
       connection = checkout
 
       begin
@@ -110,24 +108,24 @@ module AgentPool
       end
     end
 
-    def release(resource : T, index : String) : Nil
+    def release(resource : T, resource_group : String) : Nil
       idle_pushed = false
 
-      return nil unless @total[index]? && @total[index].includes?(resource)
+      return nil unless @total[resource_group]? && @total[resource_group].includes?(resource)
 
       sync do
         if resource.responds_to?(:closed?) && resource.closed?
-          @total[index].delete(resource)
+          @total[resource_group].delete(resource)
         elsif can_increase_idle_pool
-          @idle[index] ||= Set(T).new
-          @idle[index] << resource
+          @idle[resource_group] ||= Set(T).new
+          @idle[resource_group] << resource
           if resource.responds_to?(:after_release)
             resource.after_release
           end
           idle_pushed = true
         else
           resource.close
-          @total[index].delete(resource)
+          @total[resource_group].delete(resource)
         end
       end
 
@@ -140,11 +138,11 @@ module AgentPool
     # Will retry the block if a `ConnectionLost` exception is thrown.
     # It will try to reuse all of the available connection right away,
     # but if a new connection is needed there is a `retry_delay` seconds delay.
-    def retry(index)
+    def retry(resource_group, &)
       current_available = 0
 
       sync do
-        current_available = @idle[index]?.try(&.size) || 0
+        current_available = @idle[resource_group]?.try(&.size) || 0
         # if the pool hasn't reach the max size, allow 1 attempt
         # to make a new connection if needed without sleeping
         current_available += 1 if can_increase_pool?
@@ -160,7 +158,7 @@ module AgentPool
           # we still need to remove it from the known pool.
           # Closed connection will be evicted from statement cache
           # in PoolPreparedStatement#clean_connections
-          sync { delete(e.resource, index) }
+          sync { delete(e.resource, resource_group) }
         rescue e : PoolResourceRefused
           # a ConnectionRefused means a new connection
           # was intended to be created
@@ -171,31 +169,31 @@ module AgentPool
     end
 
     # :nodoc:
-    def each_resource(index)
+    def each_resource(resource_group, &)
       sync do
-        (!@idle[index].nil ? @idle[index] : [] of T).each do |resource|
+        (!@idle[resource_group].nil ? @idle[resource_group] : [] of T).each do |resource|
           yield resource
         end
       end
     end
 
     # :nodoc:
-    def is_available?(resource : T, index)
-      !@idle[index]?.nil? && @idle[index].includes?(resource)
+    def is_available?(resource : T, resource_group)
+      !@idle[resource_group]?.nil? && @idle[resource_group].includes?(resource)
     end
 
     # :nodoc:
-    def delete(resource : T, index)
-      !@total[index]?.nil? && @total[index].delete(resource)
-      !@idle[index]?.nil? && @idle[index].delete(resource)
+    def delete(resource : T, resource_group)
+      !@total[resource_group]?.nil? && @total[resource_group].delete(resource)
+      !@idle[resource_group]?.nil? && @idle[resource_group].delete(resource)
     end
 
-    private def build_resource(index) : T
-      resource = @factory.call(index)
-      @total[index] ||= [] of T
-      @total[index] << resource
-      @idle[index] ||= Set(T).new
-      @idle[index] << resource
+    private def build_resource(resource_group) : T
+      resource = @factory.call(resource_group)
+      @total[resource_group] ||= [] of T
+      @total[resource_group] << resource
+      @idle[resource_group] ||= Set(T).new
+      @idle[resource_group] << resource
       resource
     end
 
@@ -207,12 +205,12 @@ module AgentPool
       @idle.values.map(&.size).sum < @max_idle_pool_size
     end
 
-    private def pick_available(index)
-      ar = @idle[index]?
+    private def pick_available(resource_group)
+      ar = @idle[resource_group]?
       if ar
         return ar.first?
       end
-      return nil
+      nil
     end
 
     private def wait_for_available
@@ -223,7 +221,7 @@ module AgentPool
         sync_dec_waiting_resource
       when timeout(@checkout_timeout.seconds)
         sync_dec_waiting_resource
-        raise DB::PoolTimeout.new("Could not check out a connection in #{@checkout_timeout} seconds")
+        raise PoolTimeout.new("Could not check out a connection in #{@checkout_timeout} seconds")
       end
     end
 
@@ -239,7 +237,7 @@ module AgentPool
       @waiting_resource > 0
     end
 
-    private def sync
+    private def sync(&)
       @mutex.lock
       begin
         yield
@@ -248,7 +246,7 @@ module AgentPool
       end
     end
 
-    private def unsync
+    private def unsync(&)
       @mutex.unlock
       begin
         yield
