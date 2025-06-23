@@ -1,5 +1,3 @@
-require "db"
-
 module AgentPool
   class AgentPool(T)
     # Pool configuration
@@ -10,7 +8,7 @@ module AgentPool
     @max_idle_pool_size : Int32
     # seconds to wait before timeout while doing a checkout
     @checkout_timeout : Float64
-    # maximum amount of retry attempts to reconnect to the db. See `Pool#retry`
+    # maximum amount of retry attempts to reconnect to the resource. See `Pool#retry`
     @retry_attempts : Int32
     # seconds to wait before a retry attempt
     @retry_delay : Float64
@@ -21,7 +19,7 @@ module AgentPool
     @total = {} of String => Array(T)
     # connections available for checkout
     @idle = {} of String => Set(T)
-    # connections waiting to be stablished (they are not in *@idle* nor in *@total*)
+    # connections waiting to be established (they are not in *@idle* nor in *@total*)
     @inflight : Int32
 
     # Sync state
@@ -223,7 +221,7 @@ module AgentPool
         sync_dec_waiting_resource
       when timeout(@checkout_timeout.seconds)
         sync_dec_waiting_resource
-        raise DB::PoolTimeout.new("Could not check out a connection in #{@checkout_timeout} seconds")
+        raise PoolTimeout.new("Could not check out a connection in #{@checkout_timeout} seconds")
       end
     end
 
