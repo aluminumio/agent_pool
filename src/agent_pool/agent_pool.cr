@@ -14,6 +14,8 @@ module AgentPool
     @retry_attempts : Int32
     # seconds to wait before a retry attempt
     @retry_delay : Float64
+    # idle TTL — agents unused longer than this are evicted (0 = no eviction)
+    @idle_ttl : Float64
 
     # Pool state
 
@@ -23,6 +25,8 @@ module AgentPool
     @idle = {} of String => Set(T)
     # connections waiting to be stablished (they are not in *@idle* nor in *@total*)
     @inflight : Int32
+    # last checkout time per index (for idle TTL eviction)
+    @last_used = {} of String => Time::Instant
 
     # Sync state
 
@@ -34,11 +38,12 @@ module AgentPool
     @mutex : Mutex
 
     def initialize(@max_pool_size = 0, @max_idle_pool_size = 1, @checkout_timeout = 5.0,
-                   @retry_attempts = 1, @retry_delay = 0.2, &@factory : String -> T)
+                   @retry_attempts = 1, @retry_delay = 0.2, @idle_ttl = 0.0, &@factory : String -> T)
       @availability_channel = Channel(Nil).new
       @waiting_resource = 0
       @inflight = 0
       @mutex = Mutex.new
+      start_idle_reaper if @idle_ttl > 0
     end
 
     # close all resources in the pool
@@ -90,6 +95,7 @@ module AgentPool
         end
 
         @idle[index].delete resource
+        @last_used[index] = Time.instant
 
         resource
       end
@@ -173,7 +179,7 @@ module AgentPool
     # :nodoc:
     def each_resource(index)
       sync do
-        (!@idle[index].nil ? @idle[index] : [] of T).each do |resource|
+        (@idle[index]?.nil? ? [] of T : @idle[index].to_a).each do |resource|
           yield resource
         end
       end
@@ -255,6 +261,46 @@ module AgentPool
       ensure
         @mutex.lock
       end
+    end
+
+    # Evict idle agents that haven't been used within @idle_ttl seconds.
+    # Runs as a background fiber, checking every minute.
+    private def start_idle_reaper
+      spawn do
+        loop do
+          sleep 1.minutes
+          evict_stale
+        end
+      end
+    end
+
+    private def evict_stale
+      now = Time.instant
+      ttl = @idle_ttl.seconds
+      evicted = 0
+
+      stale_domains = sync { @last_used.select { |_, last| (now - last) > ttl }.keys }
+
+      stale_domains.each do |domain|
+        begin
+          sync do
+            if idle_set = @idle[domain]?
+              idle_set.each do |resource|
+                resource.close rescue nil
+                @total[domain]?.try(&.delete(resource))
+                evicted += 1
+              end
+              @idle.delete(domain)
+            end
+            # Clean up empty total entries
+            @total.delete(domain) if @total[domain]?.try(&.empty?)
+            @last_used.delete(domain)
+          end
+        rescue
+        end
+      end
+
+      STDOUT.puts "AgentPool: evicted #{evicted} idle agent(s) across #{stale_domains.size} domain(s)" if evicted > 0
     end
   end
 end
