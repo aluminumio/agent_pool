@@ -27,6 +27,8 @@ module AgentPool
     @inflight : Int32
     # last checkout time per index (for idle TTL eviction)
     @last_used = {} of String => Time::Instant
+    # cumulative count of agents evicted by the idle reaper
+    getter evicted_total : Int64 = 0_i64
 
     # Sync state
 
@@ -300,6 +302,7 @@ module AgentPool
         end
       end
 
+      @evicted_total += evicted
       STDOUT.puts "AgentPool: evicted #{evicted} idle agent(s) across #{stale_domains.size} domain(s)" if evicted > 0
     end
   end
