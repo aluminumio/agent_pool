@@ -5,9 +5,9 @@ targets:
   test_build:
     main: src/agent_pool.cr
 
-dependencies:
-  db:
-    github: crystal-lang/crystal-db
+development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba
 
 authors:
   - usiegl00 <50933431+usiegl00@users.noreply.github.com>

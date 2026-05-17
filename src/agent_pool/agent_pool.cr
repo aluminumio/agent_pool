@@ -1,5 +1,3 @@
-require "db"
-
 module AgentPool
   class AgentPool(T)
     # Pool configuration
@@ -10,7 +8,7 @@ module AgentPool
     @max_idle_pool_size : Int32
     # seconds to wait before timeout while doing a checkout
     @checkout_timeout : Float64
-    # maximum amount of retry attempts to reconnect to the db. See `Pool#retry`
+    # maximum amount of retry attempts to reconnect to the resource. See `Pool#retry`
     @retry_attempts : Int32
     # seconds to wait before a retry attempt
     @retry_delay : Float64
@@ -23,7 +21,7 @@ module AgentPool
     @total = {} of String => Array(T)
     # connections available for checkout
     @idle = {} of String => Set(T)
-    # connections waiting to be stablished (they are not in *@idle* nor in *@total*)
+    # connections waiting to be established (they are not in *@idle* nor in *@total*)
     @inflight : Int32
     # last checkout time per index (for idle TTL eviction)
     @last_used = {} of String => Time::Instant
@@ -108,7 +106,7 @@ module AgentPool
       res
     end
 
-    def checkout(&block : T ->)
+    def checkout(& : T ->)
       connection = checkout
 
       begin
@@ -148,7 +146,7 @@ module AgentPool
     # Will retry the block if a `ConnectionLost` exception is thrown.
     # It will try to reuse all of the available connection right away,
     # but if a new connection is needed there is a `retry_delay` seconds delay.
-    def retry(index)
+    def retry(index, &)
       current_available = 0
 
       sync do
@@ -179,7 +177,7 @@ module AgentPool
     end
 
     # :nodoc:
-    def each_resource(index)
+    def each_resource(index, &)
       sync do
         (@idle[index]?.nil? ? [] of T : @idle[index].to_a).each do |resource|
           yield resource
@@ -220,7 +218,7 @@ module AgentPool
       if ar
         return ar.first?
       end
-      return nil
+      nil
     end
 
     private def wait_for_available
@@ -231,7 +229,7 @@ module AgentPool
         sync_dec_waiting_resource
       when timeout(@checkout_timeout.seconds)
         sync_dec_waiting_resource
-        raise DB::PoolTimeout.new("Could not check out a connection in #{@checkout_timeout} seconds")
+        raise PoolTimeout.new("Could not check out a connection in #{@checkout_timeout} seconds")
       end
     end
 
@@ -247,7 +245,7 @@ module AgentPool
       @waiting_resource > 0
     end
 
-    private def sync
+    private def sync(&)
       @mutex.lock
       begin
         yield
@@ -256,7 +254,7 @@ module AgentPool
       end
     end
 
-    private def unsync
+    private def unsync(&)
       @mutex.unlock
       begin
         yield
