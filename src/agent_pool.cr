@@ -19,4 +19,7 @@ module AgentPool
 
   class PoolRetryAttemptsExceeded < Error
   end
+
+  class PoolTimeout < Error
+  end
 end
